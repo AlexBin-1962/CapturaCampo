@@ -5,13 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CT-27 · App de Campo (MVP)</title>
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin></script>
   <!-- Leaflet Locate (GPS) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.css">
   <script src="https://unpkg.com/leaflet.locatecontrol/dist/L.Control.Locate.min.js"></script>
   <!-- Iconos -->
   <link href="https://unpkg.com/lucide-static@0.469.0/font/lucide.css" rel="stylesheet">
+  <!-- Turf.js -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <style>
     :root{
       --bg:#f7f7f8;--panel:#ffffff;--ink:#1f2937;--muted:#6b7280;--brand:#7a1c24;--brand-soft:#f3e7e9;
@@ -55,10 +57,7 @@
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}
     th{color:#6b7280;font-weight:700}
-  </style>
-  <!-- Turf.js para operaciones geoespaciales (point-in-polygon) -->
-  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-  <style>
+
     /* --- Ajustes móviles/tablet --- */
     @media (max-width: 1024px){
       .app{grid-template-columns:1fr;}
@@ -79,6 +78,33 @@
       <div class="hint" style="margin-top:6px">Modo promotor (captura en sitio). Exporta a GeoJSON/CSV y comparte al admin.</div>
       <div class="hint" style="margin-top:6px;color:#374151"><b>Nota:</b> Versión móvil/tablet listo (panel deslizable). App independiente del portal.</div>
     </header>
+
+    <!-- UNIVERSO DE TRABAJO (TOP) -->
+    <div class="section" style="border-bottom:1px solid #f0f0f0">
+      <h3 style="margin:0 0 10px 0">Universo de trabajo</h3>
+      <div class="row">
+        <div>
+          <label>Ámbito</label>
+          <select id="u_ambito">
+            <option value="">TODOS</option>
+            <option value="SECCION">SECCIÓN</option>
+            <option value="MUNICIPIO">MUNICIPIO</option>
+            <option value="DF">DISTRITO FEDERAL</option>
+            <option value="DL">DISTRITO LOCAL</option>
+          </select>
+        </div>
+        <div>
+          <label>Clave</label>
+          <input id="u_clave" placeholder="Ej. 1234 o MUN-LEON" />
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="btnAplicarUniverso"><i class="lucide-filter"></i><span>Aplicar filtro</span></button>
+        <button class="btn" id="btnLimpiarUniverso"><i class="lucide-eraser"></i><span>Limpiar</span></button>
+        <span id="universoBadge" class="badge" style="display:none"></span>
+      </div>
+      <div class="hint">Este filtro limita lo que ves y exportas en este equipo. No borra datos.</div>
+    </div>
 
     <div class="section">
       <h3 style="margin:0 0 10px 0">Nueva captura</h3>
@@ -178,8 +204,23 @@
       </div>
       <div class="hint" style="margin-top:6px">Tip: puedes geocodificar por domicilio y se llenarán automáticamente MUNICIPIO, DF, DL y SECCIÓN.</div>
     </div>
-    <div class="toolbar">
-      <div class="hint" style="margin-top:6px">Consejo: captura primero datos y luego ubica el punto (click en mapa o GPS).</div>
+
+    <!-- REGISTROS LOCALES -->
+    <div class="section" style="border-top:1px solid #f0f0f0">
+      <h3 style="margin:0 0 10px 0">Registros (local)</h3>
+      <div class="toolbar">
+        <button class="btn" id="btnExportGeo"><i class="lucide-download"></i><span>Exportar GeoJSON</span></button>
+        <button class="btn" id="btnExportCSV"><i class="lucide-table"></i><span>Exportar CSV</span></button>
+        <label class="btn" for="fileImport"><i class="lucide-upload"></i><span>Importar GeoJSON</span></label>
+        <input id="fileImport" type="file" accept=".json,.geojson" style="display:none" />
+        <button class="btn" id="btnLimpiar"><i class="lucide-trash-2"></i><span>Vaciar todo</span></button>
+      </div>
+      <div style="max-height:160px;overflow:auto;margin-top:10px">
+        <table id="tbl">
+          <thead><tr><th>#</th><th>Nombre</th><th>Categoría</th><th>Ámbito/Sección</th><th>Lat</th><th>Lng</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="section" style="border-top:1px solid #f0f0f0">
@@ -214,17 +255,40 @@
             <input id="cfg_gh_path" placeholder="data/ct27_registros.geojson" />
           </div>
         </div>
+        <div class="row">
+          <div>
+            <label>Ruta PRUEBAS</label>
+            <input id="cfg_gh_path_pruebas" placeholder="data/ct27_registros_pruebas.geojson" />
+          </div>
+          <div>
+            <label>Modo Pruebas</label>
+            <div style="display:flex;align-items:center;gap:8px"><input id="cfg_mode_pruebas" type="checkbox" /><span class="hint">Si está activo, se sincroniza a la ruta de PRUEBAS y marca cada captura como prueba.</span></div>
+          </div>
+        </div>
         <div>
           <label>Token GitHub (no se guarda en servidor)</label>
           <input id="cfg_gh_token" type="password" placeholder="token con permiso de contents" />
+        </div>
+        <div class="row">
+          <div>
+            <label>Bloquear configuración</label>
+            <div style="display:flex;align-items:center;gap:8px"><input id="cfg_lock" type="checkbox" /><span class="hint">Oculta/inhabilita campos de configuración para promotores</span></div>
+          </div>
+          <div>
+            <label>Cargar config remota</label>
+            <div class="toolbar" style="margin:0;padding:0"><button class="btn" id="btnLoadConfigUrl"><i class="lucide-link"></i><span>Desde URL</span></button><label class="btn" for="fileConfig"><i class="lucide-file-input"></i><span>Desde archivo</span></label><input id="fileConfig" type="file" accept=".json" style="display:none" /></div>
+          </div>
         </div>
       </div>
       <div class="toolbar">
         <button class="btn" id="btnSaveConfig"><i class="lucide-save"></i><span>Guardar configuración</span></button>
         <button class="btn" id="btnTestSecciones"><i class="lucide-check-circle-2"></i><span>Probar secciones</span></button>
+        <button class="btn" id="btnLoadGitHub"><i class="lucide-cloud-download"></i><span>Cargar desde GitHub</span></button>
         <button class="btn btn-primary" id="btnSyncGitHub"><i class="lucide-cloud-upload"></i><span>Sincronizar a GitHub</span></button>
+        <button class="btn" id="btnRunTests"><i class="lucide-bug"></i><span>Auto‑tests</span></button>
       </div>
       <div class="hint" style="margin-top:6px">Sugerencia: usa un token de GitHub <em>fine-grained</em> con permiso a <b>Contents: Read & Write</b> solo en el repo destino.</div>
+      <pre id="testlog" style="font-size:11px;color:#6b7280;background:#f9fafb;padding:8px;border-radius:8px;max-height:120px;overflow:auto;display:none"></pre>
     </div>
   </aside>
 
@@ -262,11 +326,22 @@ const CATEGORIAS = [
   { id:"OBSERVADOR", color:"#94a3b8" }
 ];
 
-// URL del GeoJSON de secciones (ajusta la ruta a tu dataset)
-const DEFAULT_URL_SECCIONES = '/data/geo/secciones.geojson';
+// URL del GeoJSON de secciones
+const DEFAULT_URL_SECCIONES = '/estrategico/data/geo/secciones.geojson';
+const DEFAULT_CONFIG_URL = './config.json';
+
 let SECCIONES_FC = null; // FeatureCollection en memoria
+
 const CONFIG_KEY = 'ct27_campo_config_v1';
-let CONFIG = { url_secciones: DEFAULT_URL_SECCIONES, gh_owner:'', gh_repo:'', gh_branch:'main', gh_path:'data/ct27_registros.geojson', gh_token:'' };
+const FILTER_KEY  = 'ct27_campo_filtro_v1';
+let CONFIG = {
+  url_secciones: DEFAULT_URL_SECCIONES,
+  gh_owner:'', gh_repo:'', gh_branch:'main', gh_path:'data/ct27_registros.geojson',
+  gh_path_pruebas:'data/ct27_registros_pruebas.geojson',
+  mode_pruebas:false,
+  lock_config:false
+};
+let FILTRO = { ambito:'', clave:'' };
 
 const STORAGE_KEY = 'ct27_campo_registros_v1';
 let modoColocar = false; // si true, el siguiente click en el mapa coloca punto
@@ -281,34 +356,16 @@ function descargar(nombre, contenido){
   const a = document.createElement('a'); a.href=url; a.download=nombre; a.click(); URL.revokeObjectURL(url);
 }
 function getCurrentGeoJSON(){
-  const regs = cargar();
-  return {
-    type: 'FeatureCollection',
-    features: regs.filter(r => r.lat && r.lng).map(r => ({
-      type: 'Feature',
-      properties: {
-        id: r.id,
-        nombre: r.nombre,
-        tel: r.tel,
-        domicilio: r.domicilio,
-        categoria: r.categoria,
-        color: r.color,
-        ambito: r.ambito,
-        ambito_clave: r.ambito_clave,
-        mun: r.mun,
-        df: r.df,
-        dl: r.dl,
-        seccion: r.seccion,
-        notas: r.notas,
-        created_at: r.created_at
-      },
-      geometry: { type: 'Point', coordinates: [r.lng, r.lat] }
-    }))
-  };
+  const regs = getFilteredRegs();
+  return { type:'FeatureCollection', features: regs.filter(r=>r.lat&&r.lng).map(r=>({
+    type:'Feature',
+    properties:{ id:r.id, nombre:r.nombre, tel:r.tel, domicilio:r.domicilio, categoria:r.categoria, color:r.color, ambito:r.ambito, ambito_clave:r.ambito_clave, mun:r.mun, df:r.df, dl:r.dl, seccion:r.seccion, notas:r.notas, created_at:r.created_at, prueba: !!r.prueba },
+    geometry:{ type:'Point', coordinates:[r.lng, r.lat] }
+  }))};
 }
 function toCSV(rows){
   const esc = v => '"'+String(v??'').replaceAll('"','""')+'"';
-  const header = Object.keys(rows[0]||{}); 
+  const header = Object.keys(rows[0]||{});
   const lines = [header.map(esc).join(',')];
   for(const r of rows){ lines.push(header.map(k=>esc(r[k])).join(',')); }
   return lines.join('\n');
@@ -319,6 +376,38 @@ function cargar(){
   try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch{ return []; }
 }
 function guardar(regs){ localStorage.setItem(STORAGE_KEY, JSON.stringify(regs)); renderTabla(); renderLegend(); dibujarCapa(); }
+function cargarFiltro(){ try{ FILTRO = Object.assign(FILTRO, JSON.parse(localStorage.getItem(FILTER_KEY)||'{}')); }catch{} }
+function guardarFiltro(next){ FILTRO = Object.assign(FILTRO, next); localStorage.setItem(FILTER_KEY, JSON.stringify(FILTRO)); actualizarBadgeUniverso(); renderTabla(); dibujarCapa(); }
+function getFilteredRegs(){
+  const all = cargar();
+  const {ambito, clave} = FILTRO;
+  if(!ambito && !clave) return all;
+  return all.filter(r=>{
+    if(ambito && ambito!=='' && ambito!=='SECCION' && r.ambito!==ambito) return false;
+    if(ambito==='SECCION'){
+      if(clave && String(r.seccion||r.ambito_clave||'').toUpperCase() !== String(clave).toUpperCase()) return false;
+      return true;
+    }
+    if(ambito==='MUNICIPIO'){
+      if(clave && String(r.mun||'').toUpperCase() !== String(clave).toUpperCase()) return false;
+      return true;
+    }
+    if(ambito==='DF'){
+      if(clave && String(r.df||'').toUpperCase() !== String(clave).toUpperCase()) return false;
+      return true;
+    }
+    if(ambito==='DL'){
+      if(clave && String(r.dl||'').toUpperCase() !== String(clave).toUpperCase()) return false;
+      return true;
+    }
+    // Si sólo hay clave sin ámbito, matchea contra varios campos
+    if(!ambito && clave){
+      const c = String(clave).toUpperCase();
+      return [r.seccion, r.ambito_clave, r.mun, r.df, r.dl].some(v=> String(v||'').toUpperCase()===c);
+    }
+    return true;
+  });
+}
 
 // ======= UI inicial =======
 (function initForm(){
@@ -336,49 +425,102 @@ function guardar(regs){ localStorage.setItem(STORAGE_KEY, JSON.stringify(regs));
 
 // ======= Mapa =======
 const map = L.map('map', { zoomControl:true }).setView([21.122, -101.682], 12);
-const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, attribution: '&copy; OpenStreetMap'
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
 
-// Cargar SECCIONES para autocompletar (MUNICIPIO/DF/DL/SECCION)
-(async function cargarSecciones(){
+// ======= Config: cargar en arranque =======
+async function tryLoadRemoteConfig(){
+  const params = new URLSearchParams(location.search);
+  const cfgUrl = params.get('cfg') || DEFAULT_CONFIG_URL;
   try{
-    cargarConfig(); // asegura CONFIG antes
+    const res = await fetch(cfgUrl, {cache:'no-store'});
+    if(res.ok){
+      const remote = await res.json();
+      CONFIG = Object.assign(CONFIG, remote||{});
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
+      toast('Configuración remota aplicada');
+    }
+  }catch{ /* opcional */ }
+}
+
+function cargarConfig(){
+  try{ CONFIG = Object.assign(CONFIG, JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')); }catch{ /*noop*/ }
+  // Pinta inputs
+  $('#cfg_url_secciones')?.setAttribute('value', CONFIG.url_secciones||'');
+  $('#cfg_gh_owner')?.setAttribute('value', CONFIG.gh_owner||'');
+  $('#cfg_gh_repo')?.setAttribute('value', CONFIG.gh_repo||'');
+  $('#cfg_gh_branch')?.setAttribute('value', CONFIG.gh_branch||'');
+  $('#cfg_gh_path')?.setAttribute('value', CONFIG.gh_path||'');
+  $('#cfg_gh_path_pruebas')?.setAttribute('value', CONFIG.gh_path_pruebas||'');
+  $('#cfg_mode_pruebas') && ($('#cfg_mode_pruebas').checked = !!CONFIG.mode_pruebas);
+  $('#cfg_lock') && ($('#cfg_lock').checked = !!CONFIG.lock_config);
+  // Bloqueo visual si corresponde
+  const lock = !!CONFIG.lock_config;
+  ['#cfg_url_secciones','#cfg_gh_owner','#cfg_gh_repo','#cfg_gh_branch','#cfg_gh_path','#cfg_gh_path_pruebas','#cfg_gh_token','#btnSaveConfig','#btnLoadConfigUrl','#fileConfig'].forEach(sel=>{ const el=$(sel); if(el){ el.disabled = lock; }});
+}
+function guardarConfig(){
+  // Normaliza ruta a formato URL (forward slashes)
+  const norm = (s)=> (s||'').replace(/\\/g,'/');
+  const next = {
+    url_secciones: norm($('#cfg_url_secciones')?.value?.trim()) || CONFIG.url_secciones,
+    gh_owner: $('#cfg_gh_owner')?.value?.trim()||'',
+    gh_repo: $('#cfg_gh_repo')?.value?.trim()||'',
+    gh_branch: $('#cfg_gh_branch')?.value?.trim()||'main',
+    gh_path: norm($('#cfg_gh_path')?.value?.trim()||'data/ct27_registros.geojson'),
+    gh_path_pruebas: norm($('#cfg_gh_path_pruebas')?.value?.trim()||'data/ct27_registros_pruebas.geojson'),
+    mode_pruebas: !!$('#cfg_mode_pruebas')?.checked,
+    lock_config: !!$('#cfg_lock')?.checked
+  };
+  CONFIG = Object.assign(CONFIG, next);
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
+  cargarConfig();
+}
+
+function actualizarBadgeUniverso(){
+  const badge = $('#universoBadge');
+  const a = FILTRO.ambito||'TODOS';
+  const k = FILTRO.clave||'';
+  if(!FILTRO.ambito && !FILTRO.clave){ badge.style.display='none'; return; }
+  badge.textContent = `Universo: ${a}${k?(' · '+k):''}`;
+  badge.style.display='inline-block';
+}
+
+// ======= Cargar secciones al arrancar =======
+(async function boot(){
+  await tryLoadRemoteConfig();
+  cargarConfig();
+  cargarFiltro();
+  actualizarBadgeUniverso();
+  try{
     const res = await fetch(CONFIG.url_secciones || DEFAULT_URL_SECCIONES);
-    SECCIONES_FC = await res.json();
+    if(res.ok){ SECCIONES_FC = await res.json(); }
   }catch(e){ console.warn('No se pudo cargar secciones.geojson', e); }
+  renderTabla(); renderLegend(); dibujarCapa();
 })();
 
 // controlar click para colocar punto
-map.on('click', (e)=>{
-  if(!modoColocar) return;
-  colocarPuntero(e.latlng);
-});
+map.on('click', (e)=>{ if(!modoColocar) return; colocarPuntero(e.latlng); });
 
 function colocarPuntero(latlng){
   if(punteroTemporal) map.removeLayer(punteroTemporal);
-  punteroTemporal = L.circleMarker(latlng, { radius:8, weight:2, color:'#111827', fillColor: $('#f_color').value, fillOpacity:.9 });
-  punteroTemporal.addTo(map);
+  punteroTemporal = L.circleMarker(latlng, { radius:8, weight:2, color:'#111827', fillColor: $('#f_color').value, fillOpacity:.9 }).addTo(map);
   punteroTemporal.bindTooltip('Punto provisional', {permanent:false});
   modoColocar=false; $('#btnPointer').disabled=false; toast('Punto colocado. Ahora “Guardar”.');
   autocompletarAmbitoDesdeSecciones(latlng);
 }
 
 // Locate control (botón flotante)
-$('#btnLocate').addEventListener('click', ()=>{
-  map.locate({ setView:true, maxZoom:17 });
-});
+$('#btnLocate')?.addEventListener('click', ()=>{ map.locate({ setView:true, maxZoom:17 }); });
 map.on('locationerror', ()=> toast('No se pudo obtener tu ubicación. Revisa permisos.'));
 
 // Ajustar a marcadores
-$('#btnFit').addEventListener('click', fitBoundsToData);
+$('#btnFit')?.addEventListener('click', fitBoundsToData);
 function fitBoundsToData(){
   if(capaRegistros.getLayers().length===0){ toast('No hay marcadores aún.'); return; }
   map.fitBounds(capaRegistros.getBounds(), {padding:[30,30]});
 }
 
 // Buscar dirección (Nominatim — requiere internet)
-$('#btnSearch').addEventListener('click', async ()=>{
+$('#btnSearch')?.addEventListener('click', async ()=>{
   const q = prompt('Buscar dirección (ciudad, calle, número)...');
   if(!q) return;
   try{
@@ -397,18 +539,19 @@ $('#btnSearch').addEventListener('click', async ()=>{
 const capaRegistros = L.layerGroup().addTo(map);
 function dibujarCapa(){
   capaRegistros.clearLayers();
-  const regs = cargar();
-  regs.forEach((r,i)=>{
+  const regs = getFilteredRegs();
+  regs.forEach((r)=>{
     if(!r.lat || !r.lng) return; // seguridad
     const mk = L.circleMarker([r.lat, r.lng], { radius:7, weight:2, color:'#111827', fillColor:r.color || '#7a1c24', fillOpacity:.9 });
-    mk.bindTooltip(`${r.categoria || 'CAT'} · ${r.nombre || 'Sin nombre'}`, {permanent:false});
-    mk.bindPopup(`<b>${r.nombre || ''}</b><br>${r.categoria} · ${r.ambito} ${r.ambito_clave || ''}<br>${r.domicilio || ''}<br><small>${r.notas || ''}</small>`);
+    const pruebaTag = r.prueba? ' <span style="color:#ef4444">[PRUEBA]</span>' : '';
+    mk.bindTooltip(`${r.categoria || 'CAT'} · ${r.nombre || 'Sin nombre'}${pruebaTag}`, {permanent:false});
+    mk.bindPopup(`<b>${r.nombre || ''}</b>${pruebaTag}<br>${r.categoria} · ${r.ambito} ${r.ambito_clave || ''}<br>${r.domicilio || ''}<br><small>${r.notas || ''}</small>`);
     capaRegistros.addLayer(mk);
   });
 }
 
 // ======= Geocodificación por domicilio =======
-$('#btnGeocode').addEventListener('click', async ()=>{
+$('#btnGeocode')?.addEventListener('click', async ()=>{
   const part = [$('#f_dom').value, $('#f_colonia').value, $('#f_ciudad').value, $('#f_cp').value].filter(Boolean).join(', ');
   if(!part) return toast('Escribe al menos calle/número y ciudad');
   try{
@@ -424,13 +567,13 @@ $('#btnGeocode').addEventListener('click', async ()=>{
 });
 
 // ======= Interacciones panel =======
-$('#btnPointer').addEventListener('click', ()=>{ modoColocar=true; $('#btnPointer').disabled=true; toast('Click en el mapa para colocar el punto'); });
-$('#btnGPS').addEventListener('click', ()=>{
+$('#btnPointer')?.addEventListener('click', ()=>{ modoColocar=true; $('#btnPointer').disabled=true; toast('Click en el mapa para colocar el punto'); });
+$('#btnGPS')?.addEventListener('click', ()=>{
   map.locate({ setView:true, maxZoom:18, watch:false, enableHighAccuracy:true });
   map.once('locationfound', e=>{ colocarPuntero(e.latlng); });
 });
 
-$('#btnGuardar').addEventListener('click', ()=>{
+$('#btnGuardar')?.addEventListener('click', ()=>{
   // Validaciones mínimas
   const nombre = $('#f_nombre').value.trim();
   const categoria = $('#f_cat').value;
@@ -454,6 +597,7 @@ $('#btnGuardar').addEventListener('click', ()=>{
     notas: $('#f_notas').value.trim(),
     lat: punteroTemporal.getLatLng().lat,
     lng: punteroTemporal.getLatLng().lng,
+    prueba: !!CONFIG.mode_pruebas,
     created_at: new Date().toISOString()
   };
   regs.push(nuevo); guardar(regs);
@@ -465,28 +609,26 @@ function limpiarForm(){
   ['#f_nombre','#f_tel','#f_id','#f_dom','#f_colonia','#f_ciudad','#f_cp','#f_notas','#f_ambito_clave','#auto_mun','#auto_df','#auto_dl','#auto_sec'].forEach(s=> $(s).value='');
 }
 
-$('#btnLimpiar').addEventListener('click', ()=>{
+$('#btnLimpiar')?.addEventListener('click', ()=>{
   if(confirm('¿Eliminar TODOS los registros locales?')){ localStorage.removeItem(STORAGE_KEY); guardar([]); toast('Registros eliminados'); }
 });
 
-$('#btnExportGeo').addEventListener('click', ()=>{
+$('#btnExportGeo')?.addEventListener('click', ()=>{
   const fc = getCurrentGeoJSON();
   descargar(`ct27_campo_${new Date().toISOString().slice(0,10)}.geojson`, JSON.stringify(fc, null, 2));
 });
 
-$('#btnExportCSV').addEventListener('click', ()=>{
-  const regs = cargar();
+$('#btnExportCSV')?.addEventListener('click', ()=>{
+  const regs = getFilteredRegs();
   if(!regs.length) return toast('Sin datos');
-  const rows = regs.map(r=>({
-    id:r.id,nombre:r.nombre,tel:r.tel,domicilio:r.domicilio,categoria:r.categoria,color:r.color,ambito:r.ambito,ambito_clave:r.ambito_clave,notas:r.notas,lat:r.lat,lng:r.lng,created_at:r.created_at
-  }));
-  const csv = toCSV(rows); 
+  const rows = regs.map(r=>({ id:r.id,nombre:r.nombre,tel:r.tel,domicilio:r.domicilio,categoria:r.categoria,color:r.color,ambito:r.ambito,ambito_clave:r.ambito_clave,notas:r.notas,lat:r.lat,lng:r.lng,created_at:r.created_at,prueba:r.prueba }));
+  const csv = toCSV(rows);
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`ct27_campo_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
 });
 
 // Importar GeoJSON
-$('#fileImport').addEventListener('change', async (e)=>{
+$('#fileImport')?.addEventListener('change', async (e)=>{
   const file = e.target.files[0]; if(!file) return;
   try{
     const text = await file.text(); const json = JSON.parse(text);
@@ -501,9 +643,14 @@ $('#fileImport').addEventListener('change', async (e)=>{
       color: f.properties?.color || '#7a1c24',
       ambito: f.properties?.ambito || 'SECCION',
       ambito_clave: f.properties?.ambito_clave || '',
-      notas: f.properties?.notas || '',
+      mun: f.properties?.mun || '',
+      df: f.properties?.df || '',
+      dl: f.properties?.dl || '',
+      seccion: f.properties?.seccion || '',
       lat: f.geometry?.coordinates?.[1] || null,
       lng: f.geometry?.coordinates?.[0] || null,
+      notas: f.properties?.notas || '',
+      prueba: !!f.properties?.prueba,
       created_at: f.properties?.created_at || new Date().toISOString()
     }));
     guardar(base.concat(nuevos)); toast(`Importados ${nuevos.length} registros`);
@@ -514,18 +661,19 @@ $('#fileImport').addEventListener('change', async (e)=>{
 // Tabla
 function renderTabla(){
   const tbody = document.querySelector('#tbl tbody');
+  if(!tbody) return;
   tbody.innerHTML='';
-  const regs = cargar();
+  const regs = getFilteredRegs();
   regs.forEach((r,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${i+1}</td><td>${r.nombre||''}</td><td>${r.categoria||''}</td><td>${r.seccion||r.ambito||''}</td><td>${(r.lat||'').toFixed? r.lat.toFixed(5):''}</td><td>${(r.lng||'').toFixed? r.lng.toFixed(5):''}</td>`;
+    tr.innerHTML = `<td>${i+1}</td><td>${r.nombre||''}</td><td>${r.categoria||''}${r.prueba?' [PRUEBA]':''}</td><td>${r.seccion||r.ambito||''}</td><td>${(r.lat||'').toFixed? r.lat.toFixed(5):''}</td><td>${(r.lng||'').toFixed? r.lng.toFixed(5):''}</td>`;
     tbody.appendChild(tr);
   });
 }
 
 // Leyenda
 function renderLegend(){
-  const l = $('#legend'); l.innerHTML='';
+  const l = $('#legend'); if(!l) return; l.innerHTML='';
   CATEGORIAS.forEach(c=>{
     const chip = document.createElement('div'); chip.className='chip';
     chip.innerHTML = `<span class="dot" style="background:${c.color}"></span>${c.label||c.id}`;
@@ -533,55 +681,21 @@ function renderLegend(){
   });
 }
 
-// Inicio
-renderTabla(); renderLegend(); dibujarCapa();
-
-// Cargar config en inputs
-function cargarConfig(){
-  try{ CONFIG = Object.assign(CONFIG, JSON.parse(localStorage.getItem(CONFIG_KEY)||'{}')); }catch{ /*noop*/ }
-  $('#cfg_url_secciones')?.setAttribute('value', CONFIG.url_secciones||'');
-  $('#cfg_gh_owner')?.setAttribute('value', CONFIG.gh_owner||'');
-  $('#cfg_gh_repo')?.setAttribute('value', CONFIG.gh_repo||'');
-  $('#cfg_gh_branch')?.setAttribute('value', CONFIG.gh_branch||'');
-  $('#cfg_gh_path')?.setAttribute('value', CONFIG.gh_path||'');
+// ======= Universo de trabajo (filtro) =======
+function aplicarUniverso(){
+  const amb = $('#u_ambito').value;
+  const cla = $('#u_clave').value.trim();
+  guardarFiltro({ambito: amb, clave: cla});
+  toast('Universo aplicado');
 }
-function guardarConfig(){
-  // Normaliza ruta a formato URL (forward slashes)
-  const norm = (s)=> (s||'').replace(/\\/g,'/');
-  const next = {
-    url_secciones: norm($('#cfg_url_secciones')?.value?.trim()) || CONFIG.url_secciones,
-    gh_owner: $('#cfg_gh_owner')?.value?.trim()||'',
-    gh_repo: $('#cfg_gh_repo')?.value?.trim()||'',
-    gh_branch: $('#cfg_gh_branch')?.value?.trim()||'main',
-    gh_path: norm($('#cfg_gh_path')?.value?.trim()||'data/ct27_registros.geojson')
-  };
-  CONFIG = Object.assign(CONFIG, next);
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
-}
+function limpiarUniverso(){ $('#u_ambito').value=''; $('#u_clave').value=''; guardarFiltro({ambito:'', clave:''}); toast('Universo limpiado'); }
+$('#btnAplicarUniverso')?.addEventListener('click', aplicarUniverso);
+$('#btnLimpiarUniverso')?.addEventListener('click', limpiarUniverso);
 
-cargarConfig();
-
-// Toggle panel en móvil
-const panel = document.querySelector('.panel');
-const overlay = document.createElement('div'); overlay.className='panel-overlay';
-document.querySelector('.map-wrap').appendChild(overlay);
-const toggleBtn = document.getElementById('btnTogglePanel');
-function togglePanel(open){
-  const willOpen = open!==undefined ? open : !panel.classList.contains('open');
-  panel.classList.toggle('open', willOpen); overlay.classList.toggle('show', willOpen);
-}
-toggleBtn?.addEventListener('click', ()=> togglePanel());
-overlay.addEventListener('click', ()=> togglePanel(false));
-// Abre por defecto 1 vez en móvil para indicar que existe
-if(window.matchMedia('(max-width:1024px)').matches){ setTimeout(()=>togglePanel(true), 400); }
-
-// Observa cambios de almacenamiento desde otras pestañas
-window.addEventListener('storage', (e)=>{ if(e.key===STORAGE_KEY) { renderTabla(); dibujarCapa(); }});
 // ======= Autocompletar Ámbito desde Secciones =======
 function autocompletarAmbitoDesdeSecciones(latlng){
   if(!SECCIONES_FC?.features?.length) return; // si no cargó el archivo, no falla
   const pt = turf.point([latlng.lng, latlng.lat]);
-  // Búsqueda lineal (MVP). Para producción: indexación por bbox/quadtree.
   for(const f of SECCIONES_FC.features){
     try{
       if(turf.booleanPointInPolygon(pt, f)){
@@ -590,7 +704,6 @@ function autocompletarAmbitoDesdeSecciones(latlng){
         $('#auto_df').value  = p.DISTRITO_F ?? p.DF ?? '';
         $('#auto_dl').value  = p.DISTRITO_L ?? p.DL ?? '';
         $('#auto_sec').value = p.SECCION ?? p.SEC ?? '';
-        // Sugerimos ámbito/clave por defecto
         $('#f_ambito').value = 'SECCION';
         $('#f_ambito_clave').value = $('#auto_sec').value || '';
         break;
@@ -598,7 +711,6 @@ function autocompletarAmbitoDesdeSecciones(latlng){
     }catch{ /* ignora geometrias inválidas */ }
   }
 }
-// (Segunda definición duplicada eliminada)
 
 // ======= Acciones de Configuración =======
 $('#btnSaveConfig')?.addEventListener('click', ()=>{ guardarConfig(); toast('Configuración guardada'); });
@@ -612,7 +724,30 @@ $('#btnTestSecciones')?.addEventListener('click', async ()=>{
   }catch(e){ toast('Error al cargar secciones'); }
 });
 
-// ======= Sincronizar a GitHub (Contents API) =======
+$('#btnLoadConfigUrl')?.addEventListener('click', async ()=>{
+  const url = prompt('URL de configuración (JSON)');
+  if(!url) return;
+  try{
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const remote = await res.json();
+    CONFIG = Object.assign(CONFIG, remote||{});
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
+    cargarConfig(); toast('Configuración remota aplicada');
+  }catch(e){ toast('No se pudo cargar la configuración'); }
+});
+$('#fileConfig')?.addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    const text = await file.text(); const cfg = JSON.parse(text);
+    CONFIG = Object.assign(CONFIG, cfg||{});
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
+    cargarConfig(); toast('Configuración aplicada desde archivo');
+  }catch{ toast('Archivo de configuración inválido'); }
+  e.target.value='';
+});
+
+// ======= GitHub (Contents API) =======
 async function ghGetFile(owner, repo, path, branch){
   const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`);
   if(r.status===404) return null; // no existe
@@ -638,15 +773,102 @@ async function ghPutFile({owner, repo, path, branch, token, content, message}){
 $('#btnSyncGitHub')?.addEventListener('click', async ()=>{
   try{
     guardarConfig();
-    const owner = CONFIG.gh_owner, repo = CONFIG.gh_repo, branch = CONFIG.gh_branch, path = CONFIG.gh_path;
+    const owner = CONFIG.gh_owner, repo = CONFIG.gh_repo, branch = CONFIG.gh_branch;
     const token = $('#cfg_gh_token')?.value?.trim();
+    let path = CONFIG.gh_path;
+    if(CONFIG.mode_pruebas){ path = CONFIG.gh_path_pruebas || 'data/ct27_registros_pruebas.geojson'; }
     if(!owner||!repo||!branch||!path||!token) return toast('Faltan datos de GitHub');
     const fc = getCurrentGeoJSON();
     const payload = JSON.stringify(fc, null, 2);
-    await ghPutFile({owner, repo, path, branch, token, content: payload, message: `CT-27: sync ${new Date().toISOString()}`});
-    toast('Sincronizado en GitHub ✅');
+    await ghPutFile({owner, repo, path, branch, token, content: payload, message: `CT-27: sync ${new Date().toISOString()}${CONFIG.mode_pruebas?' [PRUEBAS]':''}`});
+    toast(`Sincronizado en GitHub ✅ ${CONFIG.mode_pruebas?'(PRUEBAS)':''}`);
   }catch(e){ console.error(e); toast('Error al sincronizar'); }
 });
+
+$('#btnLoadGitHub')?.addEventListener('click', async ()=>{
+  try{
+    guardarConfig();
+    const owner = CONFIG.gh_owner, repo = CONFIG.gh_repo, branch = CONFIG.gh_branch;
+    let path = CONFIG.gh_path;
+    if(CONFIG.mode_pruebas){ path = CONFIG.gh_path_pruebas || 'data/ct27_registros_pruebas.geojson'; }
+    if(!owner||!repo||!branch||!path) return toast('Configura Owner/Repo/Branch/Path');
+    const meta = await ghGetFile(owner, repo, path, branch);
+    if(!meta?.content) return toast('Archivo no encontrado en GitHub');
+    // Decodificar Base64 a texto UTF-8
+    const bstr = atob(meta.content.replace(/\n/g, ''));
+    const bytes = Uint8Array.from(bstr, c => c.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes);
+    const json = JSON.parse(text);
+    if(json.type !== 'FeatureCollection') return toast('El archivo no es FeatureCollection');
+    const base = cargar();
+    const nuevos = (json.features||[]).map((f,i)=>({
+      id: f.properties?.id || `GH${Date.now()}_${i}`,
+      nombre: f.properties?.nombre || '',
+      tel: f.properties?.tel || '',
+      domicilio: f.properties?.domicilio || '',
+      categoria: f.properties?.categoria || 'SIMPATIZANTE',
+      color: f.properties?.color || '#7a1c24',
+      ambito: f.properties?.ambito || 'SECCION',
+      ambito_clave: f.properties?.ambito_clave || '',
+      mun: f.properties?.mun || '',
+      df: f.properties?.df || '',
+      dl: f.properties?.dl || '',
+      seccion: f.properties?.seccion || '',
+      lat: f.geometry?.coordinates?.[1] || null,
+      lng: f.geometry?.coordinates?.[0] || null,
+      notas: f.properties?.notas || '',
+      prueba: !!f.properties?.prueba,
+      created_at: f.properties?.created_at || new Date().toISOString()
+    }));
+    const replace = confirm('¿Reemplazar registros locales con los de GitHub? (Aceptar = Reemplazar, Cancelar = Fusionar)');
+    const next = replace ? nuevos : base.concat(nuevos);
+    guardar(next); toast(`Cargados ${nuevos.length} registros desde GitHub`);
+  }catch(e){ console.error(e); toast('Error al cargar desde GitHub'); }
+});
+
+// ======= Auto-tests mínimos =======
+function logTest(msg){ const el=$('#testlog'); if(!el) return; el.style.display='block'; el.textContent += `\n${msg}`; console.log(msg); }
+async function runSelfTests(){
+  try{
+    logTest('— Iniciando auto-tests…');
+    // Test toCSV
+    const csv = toCSV([{a:1,b:'x'},{a:2,b:'y'}]);
+    if(!/a,b/.test(csv) || !/2/.test(csv)) throw new Error('toCSV falló');
+    logTest('OK toCSV');
+    // Test GeoJSON generado desde registros simulados
+    const tmp = [{id:'T1',nombre:'Prueba',categoria:'SIMPATIZANTE',ambito:'SECCION',ambito_clave:'0001',lat:21.1,lng:-101.6,created_at:new Date().toISOString()}];
+    const fc = { type:'FeatureCollection', features: tmp.map(r=>({type:'Feature',properties:r,geometry:{type:'Point',coordinates:[r.lng,r.lat]}})) };
+    if(fc.type!=='FeatureCollection' || !fc.features.length) throw new Error('GeoJSON de prueba inválido');
+    logTest('OK GeoJSON básico');
+    // Test filtro
+    guardarFiltro({ambito:'SECCION', clave:'0001'});
+    const filtered = getFilteredRegs();
+    if(!Array.isArray(filtered)) throw new Error('Filtro no retorna arreglo');
+    logTest('OK filtro');
+    // Restaurar filtro
+    guardarFiltro({ambito:'', clave:''});
+    logTest('— Auto-tests completados');
+    toast('Auto-tests OK');
+  }catch(err){ logTest('ERROR tests: '+err.message); toast('Fallo en auto-tests'); }
+}
+$('#btnRunTests')?.addEventListener('click', runSelfTests);
+if(location.hash==='#test'){ runSelfTests(); }
+
+// Toggle panel en móvil
+const panel = document.querySelector('.panel');
+const overlay = document.createElement('div'); overlay.className='panel-overlay';
+document.querySelector('.map-wrap').appendChild(overlay);
+const toggleBtn = document.getElementById('btnTogglePanel');
+function togglePanel(open){
+  const willOpen = open!==undefined ? open : !panel.classList.contains('open');
+  panel.classList.toggle('open', willOpen); overlay.classList.toggle('show', willOpen);
+}
+toggleBtn?.addEventListener('click', ()=> togglePanel());
+overlay.addEventListener('click', ()=> togglePanel(false));
+if(window.matchMedia('(max-width:1024px)').matches){ setTimeout(()=>togglePanel(true), 400); }
+
+// Observa cambios de almacenamiento desde otras pestañas
+window.addEventListener('storage', (e)=>{ if(e.key===STORAGE_KEY) { renderTabla(); dibujarCapa(); }});
 </script>
 </body>
 </html>
