@@ -521,7 +521,6 @@ function renderTabla(){
     tr.innerHTML = `<td>${i+1}</td><td>${r.nombre||''}</td><td>${r.categoria||''}</td><td>${r.seccion||r.ambito||''}</td><td>${(r.lat||'').toFixed? r.lat.toFixed(5):''}</td><td>${(r.lng||'').toFixed? r.lng.toFixed(5):''}</td>`;
     tbody.appendChild(tr);
   });
-});
 }
 
 // Leyenda
@@ -574,8 +573,6 @@ function togglePanel(open){
 toggleBtn?.addEventListener('click', ()=> togglePanel());
 overlay.addEventListener('click', ()=> togglePanel(false));
 // Abre por defecto 1 vez en móvil para indicar que existe
-if(window.matchMedia('(max-width:1024px)').matches){ setTimeout(()=>togglePanel(true), 400); }('click', ()=> togglePanel(false));
-// Abre por defecto 1 vez en móvil para indicar que existe
 if(window.matchMedia('(max-width:1024px)').matches){ setTimeout(()=>togglePanel(true), 400); }
 
 // Observa cambios de almacenamiento desde otras pestañas
@@ -601,25 +598,7 @@ function autocompletarAmbitoDesdeSecciones(latlng){
     }catch{ /* ignora geometrias inválidas */ }
   }
 }
-// ======= Autocompletar Ámbito desde Secciones =======
-function autocompletarAmbitoDesdeSecciones(latlng){
-  if(!SECCIONES_FC?.features?.length) return; // si no cargó el archivo, no falla
-  const pt = turf.point([latlng.lng, latlng.lat]);
-  for(const f of SECCIONES_FC.features){
-    try{
-      if(turf.booleanPointInPolygon(pt, f)){
-        const p = f.properties || {};
-        $('#auto_mun').value = p.MUNICIPIO ?? p.MUN ?? '';
-        $('#auto_df').value  = p.DISTRITO_F ?? p.DF ?? '';
-        $('#auto_dl').value  = p.DISTRITO_L ?? p.DL ?? '';
-        $('#auto_sec').value = p.SECCION ?? p.SEC ?? '';
-        $('#f_ambito').value = 'SECCION';
-        $('#f_ambito_clave').value = $('#auto_sec').value || '';
-        break;
-      }
-    }catch{ /* ignora geometrias inválidas */ }
-  }
-}
+// (Segunda definición duplicada eliminada)
 
 // ======= Acciones de Configuración =======
 $('#btnSaveConfig')?.addEventListener('click', ()=>{ guardarConfig(); toast('Configuración guardada'); });
