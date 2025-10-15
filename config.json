@@ -1,0 +1,10 @@
+{
+  "url_secciones": "./data/secciones.geojson",
+  "gh_owner": "TU_USER",
+  "gh_repo": "CapturaCampo",
+  "gh_branch": "main",
+  "gh_path": "data/ct27_registros.geojson",
+  "gh_path_pruebas": "data/ct27_registros_pruebas.geojson",
+  "mode_pruebas": false,
+  "lock_config": true
+}
